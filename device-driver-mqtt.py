@@ -24,8 +24,15 @@ class Mqtt(Device, metaclass=DeviceMeta):
 
     def on_connect(self, client, userdata, flags, rc):
         self.info_stream("Connected with result code " + str(rc))
+        self.set_state(DevState.ON)
         for key in self.dynamicAttributes:
             self.subscribe(key)
+
+    def on_disconnect(self, client, userdata, rc):
+        if rc != 0:
+            self.warn_stream("Unexpected disconnection. trying reconnect")        
+            self.set_state(DevState.UNKNOWN)
+            self.reconnect();
 
     def on_message(self, client, userdata, msg):
         self.info_stream("Received message: " + msg.topic+" "+str(msg.payload))
@@ -59,11 +66,17 @@ class Mqtt(Device, metaclass=DeviceMeta):
         self.info_stream("Publish topic " + str(topic) + ": " + str(value))
         self.client.publish(topic, value)
 
+    def reconnect(self):
+        self.client.connect(self.host, self.port, 60)
+        self.client.loop_start()
+        self.info_stream("Connection attempted, waiting for connection result")
+        
     def init_device(self):
         self.set_state(DevState.INIT)
         self.get_device_properties(self.get_device_class())
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
+        self.client.on_disconnect = self.on_disconnect
         if self.username != "" and self.password != "":
             self.client.tls_set()  # is necessary for authentication?
             self.client.username_pw_set(self.username, self.password)
@@ -78,10 +91,7 @@ class Mqtt(Device, metaclass=DeviceMeta):
             for init_subscribe in init_subscribes:
                 self.info_stream("Init subscribe: " + str(init_subscribe.strip()))
                 self.add_dynamic_attribute(init_subscribe.strip())
-        self.client.connect(self.host, self.port, 60)
-        self.client.loop_start()
-        self.set_state(DevState.ON)
-        self.info_stream("Initialized")
+        self.reconnect()
 
 if __name__ == "__main__":
     deviceServerName = os.getenv("DEVICE_SERVER_NAME")
