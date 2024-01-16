@@ -78,7 +78,8 @@ class Mqtt(Device, metaclass=DeviceMeta):
         self.client.on_message = self.on_message
         self.client.on_disconnect = self.on_disconnect
         if self.username != "" and self.password != "":
-            self.client.tls_set()  # is necessary for authentication?
+            # 2024-01-16 tls enabling not required/possible for localhost connection with authentication enabled -> disable
+            # self.client.tls_set()  # is necessary for authentication?
             self.client.username_pw_set(self.username, self.password)
         self.info_stream("Connecting to " + str(self.host) + ":" + str(self.port))
         if self.init_dynamic_attributes != "":
