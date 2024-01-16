@@ -39,7 +39,7 @@ class Mqtt(Device, metaclass=DeviceMeta):
         if not msg.topic in self.dynamicAttributes:
             self.add_dynamic_attribute(msg.topic)
         self.dynamicAttributes[msg.topic] = msg.payload
-        self.push_change_event(msg.topic)
+        self.push_change_event(msg.topic, msg.payload)
 
     @command(dtype_in=str)
     def add_dynamic_attribute(self, topic):
