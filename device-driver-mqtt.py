@@ -5,6 +5,7 @@ from tango.server import class_property, device_property
 from tango.server import run
 import os
 import paho.mqtt.client as mqtt
+import json
 
 class Mqtt(Device, metaclass=DeviceMeta):
     pass
@@ -83,10 +84,15 @@ class Mqtt(Device, metaclass=DeviceMeta):
             self.client.username_pw_set(self.username, self.password)
         self.info_stream("Connecting to " + str(self.host) + ":" + str(self.port))
         if self.init_dynamic_attributes != "":
-            attributes = self.init_dynamic_attributes.split(",")
-            for attribute in attributes:
-                self.info_stream("Init dynamic attribute: " + str(attribute.strip()))
-                self.add_dynamic_attribute(attribute.strip())
+            try:
+                attributes = json.loads(self.init_dynamic_attributes)
+                for attributeData in attributes:
+                    self.add_dynamic_attribute(attributeData["name"]) # TODO handle more fields...
+            except JSONDecodeError as e:
+                attributes = self.init_dynamic_attributes.split(",")
+                for attribute in attributes:
+                    self.info_stream("Init dynamic attribute: " + str(attribute.strip()))
+                    self.add_dynamic_attribute(attribute.strip())
         if self.init_subscribe != "":
             init_subscribes = self.init_subscribe.split(",")
             for init_subscribe in init_subscribes:
