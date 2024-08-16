@@ -6,6 +6,7 @@ from tango.server import run
 import os
 import paho.mqtt.client as mqtt
 import json
+from json import JSONDecodeError
 
 class Mqtt(Device, metaclass=DeviceMeta):
     pass
