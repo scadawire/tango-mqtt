@@ -1,17 +1,18 @@
-# tango-symcon
+# tango-mqtt
 
-scadawire/tango-controls integration to IP-Symcon
+scadawire/tango-controls integration to Mqtt servers/devices
 
-This device driver integrates to the German building automation software of IP-Symcon. See also https://www.symcon.de/de/
+This device driver integrates to IOT devices, see also https://mqtt.org/.
 
 # Structure
 
 The integration makes use of the tango python binding to implement device driver functionality.
 See also https://tango-controls.readthedocs.io/en/latest/development/device-api/python/index.html
 
-The ip symcon specific functionality is covered by the symcon python package.
-See also https://github.com/thorstenMueller/symcon-python
+The mqtt specific functionality is covered by the mqtt paho python package.
+See also https://pypi.org/project/paho-mqtt/
 
 # Requirements
 
-The IP-Symcon Kernel version is required in version 6 and up.
+The device server supports 5.0, 3.1.1, and 3.1 of the MQTT protocol.
+The integration allows for authenticated and unauthenticated connections.
