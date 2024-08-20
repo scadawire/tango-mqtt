@@ -54,7 +54,7 @@ class Mqtt(Device, metaclass=DeviceMeta):
         prop = UserDefaultAttrProp()
         variableType = self.stringValueToVarType(variable_type_name)
         writeType = self.stringValueToWriteType(write_type_name)
-        self.dynamicAttributeValueTypes[name] = variableType
+        self.dynamicAttributeValueTypes[topic] = variableType
         if(min_value != "" and min_value != max_value): 
             prop.set_min_value(min_value)
         if(max_value != "" and min_value != max_value): 
