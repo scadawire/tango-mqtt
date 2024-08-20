@@ -1,5 +1,5 @@
 import time
-from tango import AttrQuality, AttrWriteType, DispLevel, DevState, Attr, CmdArgType
+from tango import AttrQuality, AttrWriteType, DispLevel, DevState, Attr, CmdArgType, UserDefaultAttrProp
 from tango.server import Device, attribute, command, DeviceMeta
 from tango.server import class_property, device_property
 from tango.server import run
@@ -55,6 +55,8 @@ class Mqtt(Device, metaclass=DeviceMeta):
             variableType = CmdArgType.DevLong
         if(variableTypeName == "DevDouble"):
             variableType = CmdArgType.DevDouble
+        if(variableTypeName == "DevFloat"):
+            variableType = CmdArgType.DevFloat
         if(min_value != "" and min_value != max_value): 
             prop.set_min_value(min_value)
         if(max_value != "" and min_value != max_value): 
