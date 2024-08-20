@@ -49,13 +49,13 @@ class Mqtt(Device, metaclass=DeviceMeta):
         if topic == "": return
         prop = UserDefaultAttrProp()
         variableType = CmdArgType.DevString
-        if(variableTypeName == "DevBoolean"):
+        if(variable_type_name == "DevBoolean"):
             variableType = CmdArgType.DevBoolean
-        if(variableTypeName == "DevLong"):
+        if(variable_type_name == "DevLong"):
             variableType = CmdArgType.DevLong
-        if(variableTypeName == "DevDouble"):
+        if(variable_type_name == "DevDouble"):
             variableType = CmdArgType.DevDouble
-        if(variableTypeName == "DevFloat"):
+        if(variable_type_name == "DevFloat"):
             variableType = CmdArgType.DevFloat
         if(min_value != "" and min_value != max_value): 
             prop.set_min_value(min_value)
