@@ -17,8 +17,10 @@ class Mqtt(Device, metaclass=DeviceMeta):
     password = device_property(dtype=str, default_value="")
     init_subscribe = device_property(dtype=str, default_value="")
     init_dynamic_attributes = device_property(dtype=str, default_value="")
+    tls_mode = device_property(dtype=bool, default_value="none")
     client = mqtt.Client()
     dynamicAttributes = {}
+    dynamicAttributeValueTypes = {}
 
     @attribute
     def time(self):
@@ -34,14 +36,15 @@ class Mqtt(Device, metaclass=DeviceMeta):
         if rc != 0:
             self.warn_stream("Unexpected disconnection. trying reconnect")        
             self.set_state(DevState.UNKNOWN)
-            self.reconnect();
+            self.reconnect()
 
     def on_message(self, client, userdata, msg):
+        payload = msg.payload
         self.info_stream("Received message: " + msg.topic+" "+str(msg.payload))
         if not msg.topic in self.dynamicAttributes:
             self.add_dynamic_attribute(msg.topic)
-        self.dynamicAttributes[msg.topic] = msg.payload
-        self.push_change_event(msg.topic, msg.payload)
+        self.dynamicAttributes[msg.topic] = payload
+        self.push_change_event(msg.topic, self.stringValueToTypeValue(msg.topic, payload))
 
     @command(dtype_in=str)
     def add_dynamic_attribute(self, topic, 
@@ -57,6 +60,7 @@ class Mqtt(Device, metaclass=DeviceMeta):
             variableType = CmdArgType.DevDouble
         if(variable_type_name == "DevFloat"):
             variableType = CmdArgType.DevFloat
+        self.dynamicAttributeValueTypes[name] = variableType
         if(min_value != "" and min_value != max_value): 
             prop.set_min_value(min_value)
         if(max_value != "" and min_value != max_value): 
@@ -69,8 +73,27 @@ class Mqtt(Device, metaclass=DeviceMeta):
         self.add_attribute(attr, r_meth=self.read_dynamic_attr, w_meth=self.write_dynamic_attr)
         self.dynamicAttributes[topic] = ""
 
+    def stringValueToTypeValue(self, name, val):
+        if(self.dynamicAttributeValueTypes[name] == CmdArgType.DevBoolean):
+            if(str(val).lower() == "false"):
+                return False
+            if(str(val).lower() == "true"):
+                return True
+            return bool(int(float(val)))
+        if(self.dynamicAttributeValueTypes[name] == CmdArgType.DevLong):
+            return int(float(val))
+        if(self.dynamicAttributeValueTypes[name] == CmdArgType.DevDouble):
+            return float(val)
+        if(self.dynamicAttributeValueTypes[name] == CmdArgType.DevFloat):
+            return float(val)
+        return val
+
     def read_dynamic_attr(self, attr):
-        attr.set_value(self.dynamicAttributes[attr.get_name()])
+        name = attr.get_name()
+        value = self.dynamicAttributes[name]
+        self.info_stream("read value " + str(name) + ": " + value)
+        value = self.stringValueToTypeValue(name, value)
+        attr.set_value(value)
 
     def write_dynamic_attr(self, attr):
         self.dynamicAttributes[attr.get_name()] = attr.get_write_value()
@@ -98,9 +121,9 @@ class Mqtt(Device, metaclass=DeviceMeta):
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
         self.client.on_disconnect = self.on_disconnect
+        if self.tls_mode == "tls":
+            self.client.tls_set()
         if self.username != "" and self.password != "":
-            # 2024-01-16 tls enabling not required/possible for localhost connection with authentication enabled -> disable
-            # self.client.tls_set()  # is necessary for authentication?
             self.client.username_pw_set(self.username, self.password)
         self.info_stream("Connecting to " + str(self.host) + ":" + str(self.port))
         if self.init_dynamic_attributes != "":
