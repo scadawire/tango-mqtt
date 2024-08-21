@@ -114,13 +114,14 @@ class Mqtt(Device, metaclass=DeviceMeta):
     def read_dynamic_attr(self, attr):
         name = attr.get_name()
         value = self.dynamicAttributes[name]
-        self.debug_stream("read value " + str(name) + ": " + value)
-        value = self.stringValueToTypeValue(name, value)
-        attr.set_value(value)
+        self.debug_stream("read value " + str(name) + ": " + str(value))
+        attr.set_value(self.stringValueToTypeValue(name, value))
 
     def write_dynamic_attr(self, attr):
-        self.dynamicAttributes[attr.get_name()] = attr.get_write_value()
-        self.publish([attr.get_name(), self.dynamicAttributes[attr.get_name()]])
+        value = str(attr.get_write_value())
+        name = attr.get_name()
+        self.dynamicAttributes[name] = value
+        self.publish([name, self.dynamicAttributes[name]])
 
     @command(dtype_in=str)
     def subscribe(self, topic):
