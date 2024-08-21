@@ -114,7 +114,7 @@ class Mqtt(Device, metaclass=DeviceMeta):
     def read_dynamic_attr(self, attr):
         name = attr.get_name()
         value = self.dynamicAttributes[name]
-        self.info_stream("read value " + str(name) + ": " + value)
+        self.debug_stream("read value " + str(name) + ": " + value)
         value = self.stringValueToTypeValue(name, value)
         attr.set_value(value)
 
