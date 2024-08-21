@@ -49,7 +49,7 @@ class Mqtt(Device, metaclass=DeviceMeta):
     @command(dtype_in=str)
     def add_dynamic_attribute(self, topic, 
             variable_type_name="DevString", min_value="", max_value="",
-            unit="", write_type_name=""):
+            unit="", write_type_name="", label=""):
         if topic == "": return
         prop = UserDefaultAttrProp()
         variableType = self.stringValueToVarType(variable_type_name)
@@ -61,6 +61,8 @@ class Mqtt(Device, metaclass=DeviceMeta):
             prop.set_max_value(max_value)
         if(unit != ""): 
             prop.set_unit(unit)
+        if(label != ""):
+            prop.set_label(label)
         attr = Attr(topic, variableType, writeType)
         attr.set_default_properties(prop)
         self.add_attribute(attr, r_meth=self.read_dynamic_attr, w_meth=self.write_dynamic_attr)
@@ -149,7 +151,7 @@ class Mqtt(Device, metaclass=DeviceMeta):
                 for attributeData in attributes:
                     self.add_dynamic_attribute(attributeData["name"], 
                         attributeData.get("data_type", ""), attributeData.get("min_value", ""), attributeData.get("max_value", ""),
-                        attributeData.get("unit", ""), attributeData.get("write_type", ""))
+                        attributeData.get("unit", ""), attributeData.get("write_type", ""), attributeData.get("label", ""))
             except JSONDecodeError as e:
                 attributes = self.init_dynamic_attributes.split(",")
                 for attribute in attributes:
