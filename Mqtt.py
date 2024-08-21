@@ -66,7 +66,7 @@ class Mqtt(Device, metaclass=DeviceMeta):
         self.add_attribute(attr, r_meth=self.read_dynamic_attr, w_meth=self.write_dynamic_attr)
         self.dynamicAttributes[topic] = ""
 
-    def stringValueToVarType(self, variable_type_name):
+    def stringValueToVarType(self, variable_type_name) -> CmdArgType:
         variableType = CmdArgType.DevString
         if(variable_type_name == "DevBoolean"):
             variableType = CmdArgType.DevBoolean
@@ -78,7 +78,7 @@ class Mqtt(Device, metaclass=DeviceMeta):
             variableType = CmdArgType.DevFloat
             return variableType
 
-    def stringValueToWriteType(self, write_type_name):
+    def stringValueToWriteType(self, write_type_name) -> AttrWriteType:
         writeType = AttrWriteType.READ_WRITE
         if(write_type_name == "READ"):
             writeType = AttrWriteType.READ
