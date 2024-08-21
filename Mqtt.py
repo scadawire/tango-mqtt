@@ -69,28 +69,32 @@ class Mqtt(Device, metaclass=DeviceMeta):
         self.dynamicAttributes[topic] = ""
 
     def stringValueToVarType(self, variable_type_name) -> CmdArgType:
-        variableType = CmdArgType.DevString
         if(variable_type_name == "DevBoolean"):
-            variableType = CmdArgType.DevBoolean
+            return CmdArgType.DevBoolean
         if(variable_type_name == "DevLong"):
-            variableType = CmdArgType.DevLong
+            return CmdArgType.DevLong
         if(variable_type_name == "DevDouble"):
-            variableType = CmdArgType.DevDouble
+            return CmdArgType.DevDouble
         if(variable_type_name == "DevFloat"):
-            variableType = CmdArgType.DevFloat
-            return variableType
+            return CmdArgType.DevFloat
+        if(variable_type_name == "DevString"):
+            return CmdArgType.DevString
+        if(variable_type_name == ""):
+            return CmdArgType.DevString
+        raise Exception("given variable_type '" + variable_type + "' unsupported, supported are: DevBoolean, DevLong, DevDouble, DevFloat, DevString")
 
     def stringValueToWriteType(self, write_type_name) -> AttrWriteType:
-        writeType = AttrWriteType.READ_WRITE
         if(write_type_name == "READ"):
-            writeType = AttrWriteType.READ
+            return AttrWriteType.READ
         if(write_type_name == "WRITE"):
-            writeType = AttrWriteType.WRITE
+            return AttrWriteType.WRITE
         if(write_type_name == "READ_WRITE"):
-            writeType = AttrWriteType.READ_WRITE
+            return AttrWriteType.READ_WRITE
         if(write_type_name == "READ_WITH_WRITE"):
-            writeType = AttrWriteType.READ_WITH_WRITE
-            return writeType
+            return AttrWriteType.READ_WITH_WRITE
+        if(write_type_name == ""):
+            return AttrWriteType.READ_WRITE
+        raise Exception("given write_type '" + write_type_name + "' unsupported, supported are: READ, WRITE, READ_WRITE, READ_WITH_WRITE")
 
     def stringValueToTypeValue(self, name, val):
         if(self.dynamicAttributeValueTypes[name] == CmdArgType.DevBoolean):
