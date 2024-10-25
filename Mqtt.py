@@ -154,15 +154,15 @@ class Mqtt(Device, metaclass=DeviceMeta):
                 for attributeData in attributes:
                     self.info_stream("Init dynamic attribute: " + str(attributeData))
                     self.add_dynamic_attribute(
-                        attributeData["name"], 
-                        attributeData.get("data_type", ""), 
-                        attributeData.get("min_value", ""),
-                        attributeData.get("max_value", ""),
-                        attributeData.get("unit", ""), 
-                        attributeData.get("write_type", ""), 
-                        attributeData.get("label", ""),
-                        attributeData.get("min_alarm", ""),
-                        attributeData.get("max_alarm", ""))
+                        str(attributeData["name"]), 
+                        str(attributeData.get("data_type", "")), 
+                        str(attributeData.get("min_value", "")),
+                        str(attributeData.get("max_value", "")),
+                        str(attributeData.get("unit", "")), 
+                        str(attributeData.get("write_type", "")), 
+                        str(attributeData.get("label", "")),
+                        str(attributeData.get("min_alarm", "")),
+                        str(attributeData.get("max_alarm", "")))
             except JSONDecodeError as e:
                 attributes = self.init_dynamic_attributes.split(",")
                 for attribute in attributes:
