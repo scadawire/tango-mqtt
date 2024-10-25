@@ -152,7 +152,7 @@ class Mqtt(Device, metaclass=DeviceMeta):
             try:
                 attributes = json.loads(self.init_dynamic_attributes)
                 for attributeData in attributes:
-                    self.info_stream("Init dynamic attribute: " + str(attributeData))
+                    self.info_stream(f"Init dynamic attribute: {attributeData}")
                     self.add_dynamic_attribute(
                         str(attributeData["name"]), 
                         str(attributeData.get("data_type", "")), 
