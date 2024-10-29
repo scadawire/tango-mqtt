@@ -165,7 +165,7 @@ class Mqtt(Device, metaclass=DeviceMeta):
                         str(attributeData.get("write_type", "")), 
                         str(attributeData.get("label", "")),
                         str(attributeData.get("min_alarm", "")),
-                        str(attributeData.get("max_alarm", ""))),
+                        str(attributeData.get("max_alarm", "")),
                         str(attributeData.get("min_warning", "")),
                         str(attributeData.get("max_warning", "")))
             except JSONDecodeError as e:
