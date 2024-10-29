@@ -49,7 +49,8 @@ class Mqtt(Device, metaclass=DeviceMeta):
     @command(dtype_in=str)
     def add_dynamic_attribute(self, topic, 
             variable_type_name="DevString", min_value="", max_value="",
-            unit="", write_type_name="", label="", min_alarm="", max_alarm=""):
+            unit="", write_type_name="", label="", min_alarm="", max_alarm="", 
+            min_warning="", max_warning=""):
         if topic == "": return
         prop = UserDefaultAttrProp()
         variableType = self.stringValueToVarType(variable_type_name)
@@ -61,6 +62,8 @@ class Mqtt(Device, metaclass=DeviceMeta):
         if(label != ""): prop.set_label(label)
         if(min_alarm != ""): prop.set_min_alarm(min_alarm)
         if(max_alarm != ""): prop.set_max_alarm(max_alarm)
+        if(min_warning != ""): prop.set_min_warning(min_warning)
+        if(max_warning != ""): prop.set_max_warning(max_warning)
         attr = Attr(topic, variableType, writeType)
         attr.set_default_properties(prop)
         self.add_attribute(attr, r_meth=self.read_dynamic_attr, w_meth=self.write_dynamic_attr)
@@ -152,7 +155,7 @@ class Mqtt(Device, metaclass=DeviceMeta):
             try:
                 attributes = json.loads(self.init_dynamic_attributes)
                 for attributeData in attributes:
-                    self.info_stream(f"Init dynamic attribute: {attributeData}")
+                    # self.info_stream(f"Init dynamic attribute: {attributeData}") # not working for special characters
                     self.add_dynamic_attribute(
                         str(attributeData["name"]), 
                         str(attributeData.get("data_type", "")), 
@@ -162,7 +165,9 @@ class Mqtt(Device, metaclass=DeviceMeta):
                         str(attributeData.get("write_type", "")), 
                         str(attributeData.get("label", "")),
                         str(attributeData.get("min_alarm", "")),
-                        str(attributeData.get("max_alarm", "")))
+                        str(attributeData.get("max_alarm", ""))),
+                        str(attributeData.get("min_warning", "")),
+                        str(attributeData.get("max_warning", "")))
             except JSONDecodeError as e:
                 attributes = self.init_dynamic_attributes.split(",")
                 for attribute in attributes:
