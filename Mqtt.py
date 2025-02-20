@@ -39,12 +39,14 @@ class Mqtt(Device, metaclass=DeviceMeta):
             self.reconnect()
 
     def on_message(self, client, userdata, msg):
-        payload = msg.payload
-        self.info_stream("Received message: " + msg.topic+" "+str(msg.payload))
-        if not msg.topic in self.dynamicAttributes:
-            self.add_dynamic_attribute(msg.topic)
-        self.dynamicAttributes[msg.topic] = payload
-        self.push_change_event(msg.topic, self.stringValueToTypeValue(msg.topic, payload))
+        value = msg.payload
+        name = msg.topic
+        self.info_stream("Received message: " + name + " " + str(value))
+        if not name in self.dynamicAttributes:
+            self.add_dynamic_attribute(name)
+        if(self.dynamicAttributes[name] != value):
+            self.dynamicAttributes[name] = value
+            self.push_change_event(name, self.stringValueToTypeValue(name, value))
 
     @command(dtype_in=str)
     def add_dynamic_attribute(self, topic, 
