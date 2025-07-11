@@ -1,8 +1,7 @@
 import time
-from tango import AttrQuality, AttrWriteType, DispLevel, DevState, Attr, CmdArgType, UserDefaultAttrProp
+from tango import AttrQuality, AttrWriteType, AttrDataFormat, DevState, Attr, CmdArgType, UserDefaultAttrProp, AttributeInfoEx
 from tango.server import Device, attribute, command, DeviceMeta
-from tango.server import class_property, device_property
-from tango.server import run
+from tango.server import class_property, device_property, run
 import os
 import paho.mqtt.client as mqtt
 import json
@@ -57,7 +56,7 @@ class Mqtt(Device, metaclass=DeviceMeta):
         prop = UserDefaultAttrProp()
         variableType = self.stringValueToVarType(variable_type_name)
         writeType = self.stringValueToWriteType(write_type_name)
-        format_type = self.stringValueToFormatType(format_type_name)
+        formatType = self.stringValueToFormatType(format_type_name)
         if(min_value != "" and min_value != max_value): prop.set_min_value(min_value)
         if(max_value != "" and min_value != max_value): prop.set_max_value(max_value)
         if(unit != ""):  prop.set_unit(unit)
@@ -66,7 +65,14 @@ class Mqtt(Device, metaclass=DeviceMeta):
         if(max_alarm != ""): prop.set_max_alarm(max_alarm)
         if(min_warning != ""): prop.set_min_warning(min_warning)
         if(max_warning != ""): prop.set_max_warning(max_warning)
-        attr = Attr(topic, variableType, writeType, format_type)
+        #attr = Attr(topic, variableType, writeType, formatType)
+        #attr.set_default_properties(prop)
+        #self.add_attribute(attr, r_meth=self.read_dynamic_attr, w_meth=self.write_dynamic_attr)
+        attr = AttributeInfoEx()
+        attr.name = topic
+        attr.data_type = variableType
+        attr.data_format = formatType
+        attr.writable = writeType
         attr.set_default_properties(prop)
         self.add_attribute(attr, r_meth=self.read_dynamic_attr, w_meth=self.write_dynamic_attr)
         self.dynamicAttributes[topic] = ""
