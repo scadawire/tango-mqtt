@@ -53,18 +53,18 @@ class Mqtt(Device, metaclass=DeviceMeta):
             unit="", write_type_name="READ_WRITE", label="", min_alarm="", max_alarm="",
             min_warning="", max_warning="", format_type_name=""):
         if topic == "": return
-        prop = UserDefaultAttrProp()
         variableType = self.stringValueToVarType(variable_type_name)
         writeType = self.stringValueToWriteType(write_type_name)
         formatType = self.stringValueToFormatType(format_type_name)
-        if(min_value != "" and min_value != max_value): prop.set_min_value(min_value)
-        if(max_value != "" and min_value != max_value): prop.set_max_value(max_value)
-        if(unit != ""):  prop.set_unit(unit)
-        if(label != ""): prop.set_label(label)
-        if(min_alarm != ""): prop.set_min_alarm(min_alarm)
-        if(max_alarm != ""): prop.set_max_alarm(max_alarm)
-        if(min_warning != ""): prop.set_min_warning(min_warning)
-        if(max_warning != ""): prop.set_max_warning(max_warning)
+        #prop = UserDefaultAttrProp()
+        #if(min_value != "" and min_value != max_value): prop.set_min_value(min_value)
+        #if(max_value != "" and min_value != max_value): prop.set_max_value(max_value)
+        #if(unit != ""):  prop.set_unit(unit)
+        #if(label != ""): prop.set_label(label)
+        #if(min_alarm != ""): prop.set_min_alarm(min_alarm)
+        #if(max_alarm != ""): prop.set_max_alarm(max_alarm)
+        #if(min_warning != ""): prop.set_min_warning(min_warning)
+        #if(max_warning != ""): prop.set_max_warning(max_warning)
         #attr = Attr(topic, variableType, writeType, formatType)
         #attr.set_default_properties(prop)
         #self.add_attribute(attr, r_meth=self.read_dynamic_attr, w_meth=self.write_dynamic_attr)
@@ -73,7 +73,14 @@ class Mqtt(Device, metaclass=DeviceMeta):
         attr.data_type = variableType
         attr.data_format = formatType
         attr.writable = writeType
-        attr.set_default_properties(prop)
+        if min_value != "" and min_value != max_value: attr.min_value = min_value
+        if max_value != "" and min_value != max_value: attr.max_value = max_value
+        if unit != "": attr.unit = unit
+        if label != "": attr.label = label
+        if min_alarm != "": attr.min_alarm = min_alarm
+        if max_alarm != "": attr.max_alarm = max_alarm
+        if min_warning != "": attr.min_warning = min_warning
+        if max_warning != "": attr.max_warning = max_warning
         self.add_attribute(attr, r_meth=self.read_dynamic_attr, w_meth=self.write_dynamic_attr)
         self.dynamicAttributes[topic] = ""
 
