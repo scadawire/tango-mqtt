@@ -7,6 +7,7 @@ import os
 import paho.mqtt.client as mqtt
 import json
 from json import JSONDecodeError
+import ast
 
 class Mqtt(Device, metaclass=DeviceMeta):
     pass
@@ -72,19 +73,17 @@ class Mqtt(Device, metaclass=DeviceMeta):
         self.dynamicAttributes[topic] = ""
 
     def stringValueToVarType(self, variable_type_name) -> CmdArgType:
-        if(variable_type_name == "DevBoolean"):
-            return CmdArgType.DevBoolean
-        if(variable_type_name == "DevLong"):
-            return CmdArgType.DevLong
-        if(variable_type_name == "DevDouble"):
-            return CmdArgType.DevDouble
-        if(variable_type_name == "DevFloat"):
-            return CmdArgType.DevFloat
-        if(variable_type_name == "DevString"):
-            return CmdArgType.DevString
-        if(variable_type_name == ""):
-            return CmdArgType.DevString
-        raise Exception("given variable_type '" + variable_type + "' unsupported, supported are: DevBoolean, DevLong, DevDouble, DevFloat, DevString")
+        mapping = {
+            "DevBoolean": CmdArgType.DevBoolean,
+            "DevLong": CmdArgType.DevLong,
+            "DevDouble": CmdArgType.DevDouble,
+            "DevFloat": CmdArgType.DevFloat,
+            "DevString": CmdArgType.DevString,
+            "DevVarFloatArray": CmdArgType.DevVarFloatArray,
+        }
+        if variable_type_name not in mapping:
+            raise Exception("given variable_type '" + variable_type + "' unsupported, supported are:  " + ", ".join(mapping.keys())
+        return mapping[variable_type_name]
 
     def stringValueToWriteType(self, write_type_name) -> AttrWriteType:
         if(write_type_name == "READ"):
@@ -100,18 +99,21 @@ class Mqtt(Device, metaclass=DeviceMeta):
         raise Exception("given write_type '" + write_type_name + "' unsupported, supported are: READ, WRITE, READ_WRITE, READ_WITH_WRITE")
 
     def stringValueToTypeValue(self, name, val):
-        if(self.dynamicAttributeValueTypes[name] == CmdArgType.DevBoolean):
+        type = self.dynamicAttributeValueTypes[name]
+        if(type == CmdArgType.DevBoolean):
             if(str(val).lower() == "false"):
                 return False
             if(str(val).lower() == "true"):
                 return True
             return bool(int(float(val)))
-        if(self.dynamicAttributeValueTypes[name] == CmdArgType.DevLong):
+        if(type == CmdArgType.DevLong):
             return int(float(val))
-        if(self.dynamicAttributeValueTypes[name] == CmdArgType.DevDouble):
+        if(type == CmdArgType.DevDouble):
             return float(val)
-        if(self.dynamicAttributeValueTypes[name] == CmdArgType.DevFloat):
+        if(type == CmdArgType.DevFloat):
             return float(val)
+        if(type == CmdArgType.DevVarFloatArray):
+            ast.literal_eval(val)
         return val
 
     def read_dynamic_attr(self, attr):
