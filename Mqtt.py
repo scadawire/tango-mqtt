@@ -138,14 +138,14 @@ class Mqtt(Device, metaclass=DeviceMeta):
         return val
 
     def read_dynamic_attr(self, attr):
-        name = attr.get_name()
+        name = attr.get_attr_name()
         value = self.dynamicAttributes[name]
         self.debug_stream("read value " + str(name) + ": " + str(value))
         attr.set_value(self.stringValueToTypeValue(name, value))
 
     def write_dynamic_attr(self, attr):
         value = str(attr.get_write_value())
-        name = attr.get_name()
+        name = attr.get_attr_name()
         self.dynamicAttributes[name] = value
         self.publish([name, self.dynamicAttributes[name]])
 
