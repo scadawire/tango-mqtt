@@ -1,5 +1,6 @@
 import time
-from tango import AttrQuality, AttrWriteType, AttrDataFormat, DevState, Attr, CmdArgType, UserDefaultAttrProp, AttributeInfoEx
+from tango import AttrQuality, AttrWriteType, AttrDataFormat, DevState, Attr, SpectrumAttr, ImageAttr
+from tango import CmdArgType, UserDefaultAttrProp, AttributeInfoEx
 from tango.server import Device, attribute, command, DeviceMeta
 from tango.server import class_property, device_property, run
 import os
@@ -56,31 +57,22 @@ class Mqtt(Device, metaclass=DeviceMeta):
         variableType = self.stringValueToVarType(variable_type_name)
         writeType = self.stringValueToWriteType(write_type_name)
         formatType = self.stringValueToFormatType(format_type_name)
-        #prop = UserDefaultAttrProp()
-        #if(min_value != "" and min_value != max_value): prop.set_min_value(min_value)
-        #if(max_value != "" and min_value != max_value): prop.set_max_value(max_value)
-        #if(unit != ""):  prop.set_unit(unit)
-        #if(label != ""): prop.set_label(label)
-        #if(min_alarm != ""): prop.set_min_alarm(min_alarm)
-        #if(max_alarm != ""): prop.set_max_alarm(max_alarm)
-        #if(min_warning != ""): prop.set_min_warning(min_warning)
-        #if(max_warning != ""): prop.set_max_warning(max_warning)
-        #attr = Attr(topic, variableType, writeType, formatType)
-        #attr.set_default_properties(prop)
-        #self.add_attribute(attr, r_meth=self.read_dynamic_attr, w_meth=self.write_dynamic_attr)
-        attr = AttributeInfoEx()
-        attr.name = topic
-        attr.data_type = variableType
-        attr.data_format = formatType
-        attr.writable = writeType
-        if min_value != "" and min_value != max_value: attr.min_value = min_value
-        if max_value != "" and min_value != max_value: attr.max_value = max_value
-        if unit != "": attr.unit = unit
-        if label != "": attr.label = label
-        if min_alarm != "": attr.min_alarm = min_alarm
-        if max_alarm != "": attr.max_alarm = max_alarm
-        if min_warning != "": attr.min_warning = min_warning
-        if max_warning != "": attr.max_warning = max_warning
+        prop = UserDefaultAttrProp()
+        if(min_value != "" and min_value != max_value): prop.set_min_value(min_value)
+        if(max_value != "" and min_value != max_value): prop.set_max_value(max_value)
+        if(unit != ""):  prop.set_unit(unit)
+        if(label != ""): prop.set_label(label)
+        if(min_alarm != ""): prop.set_min_alarm(min_alarm)
+        if(max_alarm != ""): prop.set_max_alarm(max_alarm)
+        if(min_warning != ""): prop.set_min_warning(min_warning)
+        if(max_warning != ""): prop.set_max_warning(max_warning)
+        if formatType == AttrDataFormat.SCALAR:
+            attr = Attr(topic, variableType, writeType)
+        if formatType == AttrDataFormat.SPECTRUM:
+            attr = SpectrumAttr(topic, variableType, writeType, 256)
+        if formatType == AttrDataFormat.IMAGE:
+            attr = ImageAttr(topic, variableType, writeType, 256, 256)
+        attr.set_default_properties(prop)
         self.add_attribute(attr, r_meth=self.read_dynamic_attr, w_meth=self.write_dynamic_attr)
         self.dynamicAttributes[topic] = ""
 
@@ -138,14 +130,14 @@ class Mqtt(Device, metaclass=DeviceMeta):
         return val
 
     def read_dynamic_attr(self, attr):
-        name = attr.get_attr_name()
+        name = attr.get_name()
         value = self.dynamicAttributes[name]
         self.debug_stream("read value " + str(name) + ": " + str(value))
         attr.set_value(self.stringValueToTypeValue(name, value))
 
     def write_dynamic_attr(self, attr):
         value = str(attr.get_write_value())
-        name = attr.get_attr_name()
+        name = attr.get_name()
         self.dynamicAttributes[name] = value
         self.publish([name, self.dynamicAttributes[name]])
 
