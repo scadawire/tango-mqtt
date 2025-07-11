@@ -79,7 +79,10 @@ class Mqtt(Device, metaclass=DeviceMeta):
             "DevDouble": CmdArgType.DevDouble,
             "DevFloat": CmdArgType.DevFloat,
             "DevString": CmdArgType.DevString,
+            "DevVarStringArray": CmdArgType.DevVarStringArray,
+            "DevVarLongArray": CmdArgType.DevVarLongArray,
             "DevVarFloatArray": CmdArgType.DevVarFloatArray,
+            "DevVarDoubleArray": CmdArgType.DevVarDoubleArray
         }
         if variable_type_name not in mapping:
             raise Exception("given variable_type '" + variable_type + "' unsupported, supported are:  " + ", ".join(mapping.keys())
@@ -112,7 +115,7 @@ class Mqtt(Device, metaclass=DeviceMeta):
             return float(val)
         if(type == CmdArgType.DevFloat):
             return float(val)
-        if(type == CmdArgType.DevVarFloatArray):
+        if(type in [CmdArgType.DevVarStringArray, CmdArgType.DevVarLongArray, CmdArgType.DevVarFloatArray, CmdArgType.DevVarDoubleArray]):
             ast.literal_eval(val)
         return val
 
