@@ -110,7 +110,7 @@ class Mqtt(Device, metaclass=DeviceMeta):
         return mapping[format_type_name]
 
     def stringValueToTypeValue(self, name, val):
-        attr = self.get_device_attr().get_attribute_by_name(name)
+        attr = self.get_device_attr().get_attr_by_name(name)
         type = attr.get_data_type()
         data_format = attr.get_data_format()
         if(data_format != AttrDataFormat.SCALAR):
