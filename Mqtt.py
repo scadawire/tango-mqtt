@@ -85,21 +85,20 @@ class Mqtt(Device, metaclass=DeviceMeta):
             "DevVarDoubleArray": CmdArgType.DevVarDoubleArray
         }
         if variable_type_name not in mapping:
-            raise Exception("given variable_type '" + variable_type + "' unsupported, supported are:  " + ", ".join(mapping.keys())
+            raise Exception("given variable_type '" + variable_type + "' unsupported, supported are:  " + ", ".join(mapping.keys()))
         return mapping[variable_type_name]
 
     def stringValueToWriteType(self, write_type_name) -> AttrWriteType:
-        if(write_type_name == "READ"):
-            return AttrWriteType.READ
-        if(write_type_name == "WRITE"):
-            return AttrWriteType.WRITE
-        if(write_type_name == "READ_WRITE"):
-            return AttrWriteType.READ_WRITE
-        if(write_type_name == "READ_WITH_WRITE"):
-            return AttrWriteType.READ_WITH_WRITE
-        if(write_type_name == ""):
-            return AttrWriteType.READ_WRITE
-        raise Exception("given write_type '" + write_type_name + "' unsupported, supported are: READ, WRITE, READ_WRITE, READ_WITH_WRITE")
+        mapping = {
+            "READ": AttrWriteType.READ,
+            "WRITE": AttrWriteType.WRITE,
+            "READ_WRITE": AttrWriteType.READ_WRITE,
+            "READ_WITH_WRITE": AttrWriteType.READ_WITH_WRITE,
+            "READ_WRITE": AttrWriteType.READ_WRITE,
+        }
+        if write_type_name not in mapping:
+            raise Exception("given write_type '" + write_type_name + "' unsupported, supported are:  " + ", ".join(mapping.keys()))
+        return mapping[write_type_name]
 
     def stringValueToTypeValue(self, name, val):
         type = self.dynamicAttributeValueTypes[name]
