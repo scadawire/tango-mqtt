@@ -52,11 +52,11 @@ class Mqtt(Device, metaclass=DeviceMeta):
     def add_dynamic_attribute(self, topic, 
             variable_type_name="DevString", min_value="", max_value="",
             unit="", write_type_name="READ_WRITE", label="", min_alarm="", max_alarm="",
-            min_warning="", max_warning="", format_type_name=""):
+            min_warning="", max_warning="", data_format_name=""):
         if topic == "": return
         variableType = self.stringValueToVarType(variable_type_name)
         writeType = self.stringValueToWriteType(write_type_name)
-        formatType = self.stringValueToFormatType(format_type_name)
+        dataFormat = self.stringValueToFormatType(data_format_name)
         prop = UserDefaultAttrProp()
         if(min_value != "" and min_value != max_value): prop.set_min_value(min_value)
         if(max_value != "" and min_value != max_value): prop.set_max_value(max_value)
@@ -66,11 +66,11 @@ class Mqtt(Device, metaclass=DeviceMeta):
         if(max_alarm != ""): prop.set_max_alarm(max_alarm)
         if(min_warning != ""): prop.set_min_warning(min_warning)
         if(max_warning != ""): prop.set_max_warning(max_warning)
-        if formatType == AttrDataFormat.SCALAR:
+        if dataFormat == AttrDataFormat.SCALAR:
             attr = Attr(topic, variableType, writeType)
-        if formatType == AttrDataFormat.SPECTRUM:
+        if dataFormat == AttrDataFormat.SPECTRUM:
             attr = SpectrumAttr(topic, variableType, writeType, 256)
-        if formatType == AttrDataFormat.IMAGE:
+        if dataFormat == AttrDataFormat.IMAGE:
             attr = ImageAttr(topic, variableType, writeType, 256, 256)
         attr.set_default_properties(prop)
         self.add_attribute(attr, r_meth=self.read_dynamic_attr, w_meth=self.write_dynamic_attr)
@@ -185,7 +185,7 @@ class Mqtt(Device, metaclass=DeviceMeta):
                         str(attributeData.get("max_alarm", "")),
                         str(attributeData.get("min_warning", "")),
                         str(attributeData.get("max_warning", "")),
-                        str(attributeData.get("format_type", "")))
+                        str(attributeData.get("data_format", "")))
             except JSONDecodeError as e:
                 attributes = self.init_dynamic_attributes.split(",")
                 for attribute in attributes:
