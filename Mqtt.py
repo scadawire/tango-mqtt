@@ -179,7 +179,7 @@ class Mqtt(Device, metaclass=DeviceMeta):
                         str(attributeData.get("min_alarm", "")),
                         str(attributeData.get("max_alarm", "")),
                         str(attributeData.get("min_warning", "")),
-                        str(attributeData.get("max_warning", "")))
+                        str(attributeData.get("max_warning", "")),
                         str(attributeData.get("format_type", "")))
             except JSONDecodeError as e:
                 attributes = self.init_dynamic_attributes.split(",")
