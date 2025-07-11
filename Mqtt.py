@@ -21,7 +21,6 @@ class Mqtt(Device, metaclass=DeviceMeta):
     tls_mode = device_property(dtype=bool, default_value="none")
     client = mqtt.Client()
     dynamicAttributes = {}
-    dynamicAttributeValueTypes = {}
 
     @attribute
     def time(self):
@@ -53,12 +52,12 @@ class Mqtt(Device, metaclass=DeviceMeta):
     def add_dynamic_attribute(self, topic, 
             variable_type_name="DevString", min_value="", max_value="",
             unit="", write_type_name="", label="", min_alarm="", max_alarm="", 
-            min_warning="", max_warning=""):
+            min_warning="", max_warning="", format_type_name=""):
         if topic == "": return
         prop = UserDefaultAttrProp()
         variableType = self.stringValueToVarType(variable_type_name)
         writeType = self.stringValueToWriteType(write_type_name)
-        self.dynamicAttributeValueTypes[topic] = variableType
+        format_type = self.stringValueToFormatType(format_type_name)
         if(min_value != "" and min_value != max_value): prop.set_min_value(min_value)
         if(max_value != "" and min_value != max_value): prop.set_max_value(max_value)
         if(unit != ""):  prop.set_unit(unit)
@@ -67,7 +66,7 @@ class Mqtt(Device, metaclass=DeviceMeta):
         if(max_alarm != ""): prop.set_max_alarm(max_alarm)
         if(min_warning != ""): prop.set_min_warning(min_warning)
         if(max_warning != ""): prop.set_max_warning(max_warning)
-        attr = Attr(topic, variableType, writeType)
+        attr = Attr(topic, variableType, writeType, format_type)
         attr.set_default_properties(prop)
         self.add_attribute(attr, r_meth=self.read_dynamic_attr, w_meth=self.write_dynamic_attr)
         self.dynamicAttributes[topic] = ""
@@ -78,11 +77,7 @@ class Mqtt(Device, metaclass=DeviceMeta):
             "DevLong": CmdArgType.DevLong,
             "DevDouble": CmdArgType.DevDouble,
             "DevFloat": CmdArgType.DevFloat,
-            "DevString": CmdArgType.DevString,
-            "DevVarStringArray": CmdArgType.DevVarStringArray,
-            "DevVarLongArray": CmdArgType.DevVarLongArray,
-            "DevVarFloatArray": CmdArgType.DevVarFloatArray,
-            "DevVarDoubleArray": CmdArgType.DevVarDoubleArray
+            "DevString": CmdArgType.DevString
         }
         if variable_type_name not in mapping:
             raise Exception("given variable_type '" + variable_type + "' unsupported, supported are:  " + ", ".join(mapping.keys()))
@@ -100,8 +95,22 @@ class Mqtt(Device, metaclass=DeviceMeta):
             raise Exception("given write_type '" + write_type_name + "' unsupported, supported are:  " + ", ".join(mapping.keys()))
         return mapping[write_type_name]
 
+    def stringValueToFormatType(self, format_type_name) -> AttrDataFormat:
+        mapping = {
+            "SCALAR": AttrDataFormat.SCALAR,
+            "SPECTRUM": AttrDataFormat.SPECTRUM,
+            "IMAGE": AttrDataFormat.IMAGE,
+        }
+        if format_type_name not in mapping:
+            return AttrDataFormat.SCALAR
+        return mapping[format_type_name]
+
     def stringValueToTypeValue(self, name, val):
-        type = self.dynamicAttributeValueTypes[name]
+        attr = self.get_device_attr().get_attribute_by_name(name)
+        type = attr.get_data_type()
+        data_format = attr.get_data_format()
+        if(data_format != AttrDataFormat.SCALAR):
+            return ast.literal_eval(val)
         if(type == CmdArgType.DevBoolean):
             if(str(val).lower() == "false"):
                 return False
@@ -114,8 +123,6 @@ class Mqtt(Device, metaclass=DeviceMeta):
             return float(val)
         if(type == CmdArgType.DevFloat):
             return float(val)
-        if(type in [CmdArgType.DevVarStringArray, CmdArgType.DevVarLongArray, CmdArgType.DevVarFloatArray, CmdArgType.DevVarDoubleArray]):
-            ast.literal_eval(val)
         return val
 
     def read_dynamic_attr(self, attr):
@@ -174,6 +181,7 @@ class Mqtt(Device, metaclass=DeviceMeta):
                         str(attributeData.get("max_alarm", "")),
                         str(attributeData.get("min_warning", "")),
                         str(attributeData.get("max_warning", "")))
+                        str(attributeData.get("format_type", "")))
             except JSONDecodeError as e:
                 attributes = self.init_dynamic_attributes.split(",")
                 for attribute in attributes:
