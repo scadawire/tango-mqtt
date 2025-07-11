@@ -51,7 +51,7 @@ class Mqtt(Device, metaclass=DeviceMeta):
     @command(dtype_in=str)
     def add_dynamic_attribute(self, topic, 
             variable_type_name="DevString", min_value="", max_value="",
-            unit="", write_type_name="", label="", min_alarm="", max_alarm="", 
+            unit="", write_type_name="READ_WRITE", label="", min_alarm="", max_alarm="",
             min_warning="", max_warning="", format_type_name=""):
         if topic == "": return
         prop = UserDefaultAttrProp()
@@ -88,8 +88,7 @@ class Mqtt(Device, metaclass=DeviceMeta):
             "READ": AttrWriteType.READ,
             "WRITE": AttrWriteType.WRITE,
             "READ_WRITE": AttrWriteType.READ_WRITE,
-            "READ_WITH_WRITE": AttrWriteType.READ_WITH_WRITE,
-            "READ_WRITE": AttrWriteType.READ_WRITE,
+            "READ_WITH_WRITE": AttrWriteType.READ_WITH_WRITE
         }
         if write_type_name not in mapping:
             raise Exception("given write_type '" + write_type_name + "' unsupported, supported are:  " + ", ".join(mapping.keys()))
