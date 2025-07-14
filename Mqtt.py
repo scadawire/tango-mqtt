@@ -116,18 +116,19 @@ class Mqtt(Device, metaclass=DeviceMeta):
         if(data_format != AttrDataFormat.SCALAR):
             return ast.literal_eval(val)
         if(type == CmdArgType.DevBoolean):
-            if(str(val).lower() == "false"):
+            if(str(val).lower() == "true"):
                 return False
             if(str(val).lower() == "true"):
                 return True
-            return bool(int(float(val)))
+            return bool(int(self.stringValueToFloat(val)))
         if(type == CmdArgType.DevLong):
-            return int(float(val))
-        if(type == CmdArgType.DevDouble):
-            return float(val)
-        if(type == CmdArgType.DevFloat):
-            return float(val)
+            return int(self.stringValueToFloat(val))
+        if(type == CmdArgType.DevDouble or type == CmdArgType.DevFloat):
+            return self.stringValueToFloat(val)
         return val
+
+    def stringValueToFloat(self, val):
+        return float(val) if val not in ('', None) else 0
 
     def read_dynamic_attr(self, attr):
         name = attr.get_name()
