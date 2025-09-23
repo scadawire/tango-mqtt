@@ -114,12 +114,11 @@ class Mqtt(Device, metaclass=DeviceMeta):
         type = attr.get_data_type()
         data_format = attr.get_data_format()
         if(data_format != AttrDataFormat.SCALAR):
+            if val in ('', None): return []
             return ast.literal_eval(val)
         if(type == CmdArgType.DevBoolean):
-            if(str(val).lower() == "true"):
-                return False
-            if(str(val).lower() == "true"):
-                return True
+            if str(val).lower() == "false": return False
+            if str(val).lower() == "true": return True
             return bool(int(self.stringValueToFloat(val)))
         if(type == CmdArgType.DevLong):
             return int(self.stringValueToFloat(val))
