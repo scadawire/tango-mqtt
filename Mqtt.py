@@ -113,6 +113,7 @@ class Mqtt(Device, metaclass=DeviceMeta):
         attr = self.get_device_attr().get_attr_by_name(name)
         type = attr.get_data_type()
         data_format = attr.get_data_format()
+        if isinstance(val, bytes): val = val.decode()
         if(data_format != AttrDataFormat.SCALAR):
             if val in ('', None): return []
             return ast.literal_eval(val)
