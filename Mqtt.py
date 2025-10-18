@@ -141,6 +141,7 @@ class Mqtt(Device, metaclass=DeviceMeta):
         name = attr.get_name()
         self.dynamicAttributes[name] = value
         self.publish([name, self.dynamicAttributes[name]])
+        self.push_change_event(name, self.stringValueToTypeValue(name, value))
 
     @command(dtype_in=str)
     def subscribe(self, topic):
