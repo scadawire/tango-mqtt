@@ -7,7 +7,6 @@ import os
 import paho.mqtt.client as mqtt
 import json
 from json import JSONDecodeError
-import ast
 
 class Mqtt(Device, metaclass=DeviceMeta):
 
@@ -132,6 +131,20 @@ class Mqtt(Device, metaclass=DeviceMeta):
             return AttrDataFormat.SCALAR
         return mapping[format_type_name]
 
+    def _cast_element(self, val, data_type):
+        if data_type == CmdArgType.DevBoolean:
+            return bool(val)
+        if data_type == CmdArgType.DevLong:
+            return int(val)
+        if data_type in (CmdArgType.DevDouble, CmdArgType.DevFloat):
+            return float(val)
+        return val
+
+    def _cast_array(self, data, data_type):
+        if isinstance(data, list) and len(data) > 0 and isinstance(data[0], list):
+            return [[self._cast_element(e, data_type) for e in row] for row in data]
+        return [self._cast_element(e, data_type) for e in data]
+
     def stringValueToTypeValue(self, name, val):
         attr = self.get_device_attr().get_attr_by_name(name)
         data_type = attr.get_data_type()
@@ -141,7 +154,8 @@ class Mqtt(Device, metaclass=DeviceMeta):
         if data_format != AttrDataFormat.SCALAR:
             if val in ('', None):
                 return []
-            return ast.literal_eval(val)
+            parsed = json.loads(val) if isinstance(val, str) else val
+            return self._cast_array(parsed, data_type)
         if data_type == CmdArgType.DevBoolean:
             if str(val).lower() == "false":
                 return False
@@ -164,8 +178,13 @@ class Mqtt(Device, metaclass=DeviceMeta):
         attr.set_value(self.stringValueToTypeValue(name, value))
 
     def write_dynamic_attr(self, attr):
-        value = str(attr.get_write_value())
         name = attr.get_name()
+        value = attr.get_write_value()
+        attr_info = self.get_device_attr().get_attr_by_name(name)
+        if attr_info.get_data_format() != AttrDataFormat.SCALAR:
+            value = json.dumps(value.tolist())
+        else:
+            value = str(value)
         self.dynamicAttributes[name] = value
         self.publish([name, self.dynamicAttributes[name]])
         self.push_change_event(name, self.stringValueToTypeValue(name, value))
