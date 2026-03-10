@@ -7,6 +7,7 @@ import os
 import paho.mqtt.client as mqtt
 import json
 from json import JSONDecodeError
+import datetime
 
 class Mqtt(Device, metaclass=DeviceMeta):
 
@@ -19,13 +20,13 @@ class Mqtt(Device, metaclass=DeviceMeta):
     tls_mode = device_property(dtype=str, default_value="none")
     client = mqtt.Client()
     dynamicAttributes = {}
-    last_msg_at = None
+    last_msg_at = "none"
 
-    @attribute
+    @attribute(dtype=str)
     def time(self):
-        return time.time()
+        return str(datetime.datetime.now())
 
-    @attribute
+    @attribute(dtype=str)
     def last_msg_at(self):
         return self.last_msg_at
 
@@ -47,7 +48,7 @@ class Mqtt(Device, metaclass=DeviceMeta):
     def on_message(self, client, userdata, msg):
         value = msg.payload
         name = msg.topic
-        self.last_msg_at = time.time()
+        self.last_msg_at = str(datetime.datetime.now())
         self.info_stream("Received message: " + name + " " + str(value))
         if name not in self.dynamicAttributes:
             self.add_dynamic_attribute(name)
