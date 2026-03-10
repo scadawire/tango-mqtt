@@ -19,10 +19,15 @@ class Mqtt(Device, metaclass=DeviceMeta):
     tls_mode = device_property(dtype=str, default_value="none")
     client = mqtt.Client()
     dynamicAttributes = {}
+    last_msg_at = None
 
     @attribute
     def time(self):
         return time.time()
+
+    @attribute
+    def last_msg_at(self):
+        return self.last_msg_at
 
     def on_connect(self, client, userdata, flags, rc):
         self.info_stream("Connected with result code " + str(rc))
@@ -42,6 +47,7 @@ class Mqtt(Device, metaclass=DeviceMeta):
     def on_message(self, client, userdata, msg):
         value = msg.payload
         name = msg.topic
+        self.last_msg_at = time.time()
         self.info_stream("Received message: " + name + " " + str(value))
         if name not in self.dynamicAttributes:
             self.add_dynamic_attribute(name)
