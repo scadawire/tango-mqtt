@@ -31,7 +31,7 @@ class Mqtt(Device, metaclass=DeviceMeta):
         return self._last_msg_at
 
     def on_connect(self, client, userdata, flags, rc):
-        self.info_stream("Connected with result code " + str(rc))
+        self.info_stream("Connected with result code %s", rc)
         self.set_state(DevState.ON)
         for key in self.dynamicAttributes:
             self.subscribe(key)
@@ -43,13 +43,13 @@ class Mqtt(Device, metaclass=DeviceMeta):
             try:
                 self.client.reconnect()
             except Exception as e:
-                self.error_stream("Reconnect failed: " + str(e))
+                self.error_stream("Reconnect failed: %s", str(e))
 
     def on_message(self, client, userdata, msg):
         value = msg.payload
         name = msg.topic
         self._last_msg_at = str(datetime.datetime.now())
-        self.info_stream("Received message: " + name + " " + str(value))
+        self.debug_stream("Received message: %s %s", name, value)
         if name not in self.dynamicAttributes:
             self.add_dynamic_attribute(name)
         if self.dynamicAttributes[name] != value:
@@ -64,7 +64,7 @@ class Mqtt(Device, metaclass=DeviceMeta):
         if topic == "":
             return
         if topic in self.dynamicAttributes:
-            self.info_stream("Dynamic attribute already exists: " + topic)
+            self.info_stream("Dynamic attribute already exists: %s", topic)
             return
         variableType = self.stringValueToVarType(variable_type_name)
         writeType = self.stringValueToWriteType(write_type_name)
@@ -181,7 +181,7 @@ class Mqtt(Device, metaclass=DeviceMeta):
     def read_dynamic_attr(self, attr):
         name = attr.get_name()
         value = self.dynamicAttributes[name]
-        self.debug_stream("read value " + str(name) + ": " + str(value))
+        self.debug_stream("read value %s: %s", name, value)
         attr.set_value(self.stringValueToTypeValue(name, value))
 
     def write_dynamic_attr(self, attr):
@@ -198,13 +198,13 @@ class Mqtt(Device, metaclass=DeviceMeta):
 
     @command(dtype_in=str)
     def subscribe(self, topic):
-        self.info_stream("Subscribe to topic " + str(topic))
+        self.info_stream("Subscribe to topic %s", topic)
         self.client.subscribe(topic)
 
     @command(dtype_in=[str])
     def publish(self, args):
         topic, value = args
-        self.info_stream("Publish topic " + str(topic) + ": " + str(value))
+        self.debug_stream("Publish topic %s: %s", topic, value)
         self.client.publish(topic, value)
 
     def reconnect(self):
@@ -222,7 +222,7 @@ class Mqtt(Device, metaclass=DeviceMeta):
             self.client.tls_set()
         if self.username != "" and self.password != "":
             self.client.username_pw_set(self.username, self.password)
-        self.info_stream("Connecting to " + str(self.host) + ":" + str(self.port))
+        self.info_stream("Connecting to %s:%s", self.host, self.port)
         if self.init_dynamic_attributes != "":
             try:
                 attributes = json.loads(self.init_dynamic_attributes)
@@ -244,14 +244,14 @@ class Mqtt(Device, metaclass=DeviceMeta):
             except JSONDecodeError as e:
                 attributes = self.init_dynamic_attributes.split(",")
                 for attribute in attributes:
-                    self.info_stream("Init dynamic attribute: " + str(attribute.strip()))
+                    self.info_stream("Init dynamic attribute: %s", str(attribute.strip()))
                     self.add_dynamic_attribute(attribute.strip())
 
         if self.init_subscribe != "":
             init_subscribes = self.init_subscribe.split(",")
             for init_sub in init_subscribes:
                 topic = init_sub.strip()
-                self.info_stream("Init subscribe: " + str(topic))
+                self.info_stream("Init subscribe: %s", topic)
                 self.add_dynamic_attribute(topic)
 
         self.reconnect()
