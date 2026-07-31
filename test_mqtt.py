@@ -55,9 +55,22 @@ class State:
     def __init__(self):
         self._device_attr = MockDeviceAttr()
         self.dynamicAttributes = {}
+        self.published = []
+        self.events = []
 
     def get_device_attr(self):
         return self._device_attr
+
+    def publish(self, payload):
+        self.published.append(payload)
+
+    def push_change_event(self, name, value):
+        # defined here rather than fallen through to Mqtt: that one resolves to the real tango
+        # DeviceImpl method, which rejects a mock as its self
+        self.events.append((name, value))
+
+    def debug_stream(self, message, *args):
+        pass
 
     def __getattr__(self, name):
         import functools
@@ -79,13 +92,25 @@ def convert(s, name, val):
     return Mqtt.stringValueToTypeValue(s, name, val)
 
 
+class MockWriteAttr:
+    """Mimics the attribute handed to a write method by Tango."""
+    def __init__(self, name, write_value):
+        self._name = name
+        self._write_value = write_value
+
+    def get_name(self):
+        return self._name
+
+    def get_write_value(self):
+        return self._write_value
+
+
 def serialize_write(s, name, value):
-    """Simulate Tango write -> MQTT string (same logic as Mqtt.write_dynamic_attr)."""
-    attr_info = s.get_device_attr().get_attr_by_name(name)
-    if attr_info.get_data_format() != AttrDataFormat.SCALAR:
-        return json.dumps(value.tolist())
-    else:
-        return str(value)
+    """Tango write -> MQTT string, through the real Mqtt.write_dynamic_attr. This used to repeat the
+       driver's logic instead of calling it, which is why a spectrum of DevString serialising through
+       a numpy only code path went unnoticed here while failing on every real write."""
+    Mqtt.write_dynamic_attr(s, MockWriteAttr(name, value))
+    return s.dynamicAttributes[name]
 
 
 # ===========================================================================
@@ -169,6 +194,20 @@ def assert_false(test_name, value):
     assert_equal(test_name, value, False)
 
 
+def assert_raises(test_name, fn):
+    global passed, failed
+    try:
+        fn()
+    except Exception:
+        passed += 1
+        print(f"  PASS  {test_name}")
+        return
+    failed += 1
+    message = f"  FAIL  {test_name}: expected an exception, none raised"
+    print(message)
+    errors.append(message)
+
+
 # ===========================================================================
 #  Test suites -- helper methods
 # ===========================================================================
@@ -207,10 +246,17 @@ def test_string_value_to_write_type():
         ("READ", AttrWriteType.READ),
         ("WRITE", AttrWriteType.WRITE),
         ("READ_WRITE", AttrWriteType.READ_WRITE),
-        ("READ_WITH_WRITE", AttrWriteType.READ_WITH_WRITE),
     ]:
         got = Mqtt.stringValueToWriteType(s, name)
         assert_equal(f"writeType {name}", got, expected)
+
+    # READ_WITH_WRITE needs an associated write attribute, which this driver never defines: building
+    # the Attr anyway aborts init_device and takes the whole device server down, so it has to be
+    # turned away here instead of being mapped through
+    assert_raises("writeType READ_WITH_WRITE rejected",
+                  lambda: Mqtt.stringValueToWriteType(s, "READ_WITH_WRITE"))
+    assert_raises("writeType unknown rejected",
+                  lambda: Mqtt.stringValueToWriteType(s, "NOPE"))
 
 
 def test_string_value_to_format_type():
@@ -546,6 +592,29 @@ def test_write_roundtrip_spectrum():
     got = convert(s, "wr_sp_bool", serialized)
     assert_list_equal("spectrum bool round-trip", got, [True, False, True])
 
+    # a DevString spectrum is handed over as a plain python list rather than a numpy array, which
+    # used to hit "'list' object has no attribute 'tolist'" and fail every write of one
+    register_attr(s, "wr_sp_str", CmdArgType.DevString, AttrDataFormat.SPECTRUM)
+    serialized = serialize_write(s, "wr_sp_str", ["cherry", "banana", ""])
+    got = convert(s, "wr_sp_str", serialized)
+    assert_list_equal("spectrum string round-trip", got, ["cherry", "banana", ""])
+
+
+def test_write_roundtrip_image_string():
+    print("\n-- write round-trip: image of strings (list of lists, no numpy) --")
+    s = State()
+
+    register_attr(s, "wr_img_str", CmdArgType.DevString, AttrDataFormat.IMAGE)
+    rows = [["a", "b", "c"], ["d", "e", "f"]]
+    serialized = serialize_write(s, "wr_img_str", rows)
+    assert_equal("image string serialises", serialized, json.dumps(rows))
+
+    # the numeric image stays on the numpy path, so both have to keep working
+    register_attr(s, "wr_img_dbl", CmdArgType.DevDouble, AttrDataFormat.IMAGE)
+    arr = np.array([[1.5, 2.5], [3.5, 4.5]], dtype=np.float64)
+    serialized = serialize_write(s, "wr_img_dbl", arr)
+    assert_equal("image double serialises", serialized, json.dumps([[1.5, 2.5], [3.5, 4.5]]))
+
 
 def test_write_roundtrip_image():
     print("\n-- write round-trip: image (numpy 2D -> json -> parse) --")
@@ -679,6 +748,7 @@ def main():
     # -- write serialization round-trips --
     test_write_roundtrip_scalar()
     test_write_roundtrip_spectrum()
+    test_write_roundtrip_image_string()
     test_write_roundtrip_image()
 
     # -- edge cases --

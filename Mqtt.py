@@ -115,11 +115,15 @@ class Mqtt(Device, metaclass=DeviceMeta):
         return mapping[variable_type_name]
 
     def stringValueToWriteType(self, write_type_name) -> AttrWriteType:
+        # READ_WITH_WRITE is deliberately not offered: tango only accepts it for an attribute that
+        # names an associated write attribute, and every attribute here is built as a plain
+        # Attr(topic, type, writeType) without one. Constructing it anyway does not fail that single
+        # attribute, it aborts init_device with "Associated attribute not defined" and takes the
+        # whole device server down, so it is rejected up front with a message naming the real options.
         mapping = {
             "READ": AttrWriteType.READ,
             "WRITE": AttrWriteType.WRITE,
-            "READ_WRITE": AttrWriteType.READ_WRITE,
-            "READ_WITH_WRITE": AttrWriteType.READ_WITH_WRITE
+            "READ_WRITE": AttrWriteType.READ_WRITE
         }
         if write_type_name not in mapping:
             raise Exception(
@@ -189,7 +193,10 @@ class Mqtt(Device, metaclass=DeviceMeta):
         value = attr.get_write_value()
         attr_info = self.get_device_attr().get_attr_by_name(name)
         if attr_info.get_data_format() != AttrDataFormat.SCALAR:
-            value = json.dumps(value.tolist())
+            # a numeric spectrum or image arrives as a numpy array, a DevString one as a plain list
+            # (of lists for an image), and only the former carries tolist() - calling it on the
+            # string case raised AttributeError and made every write of one fail
+            value = json.dumps(value.tolist() if hasattr(value, "tolist") else list(value))
         else:
             value = str(value)
         self.dynamicAttributes[name] = value
