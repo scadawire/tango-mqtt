@@ -16,7 +16,8 @@ import sys
 import traceback
 
 import numpy as np
-from tango import CmdArgType, AttrDataFormat, AttrWriteType
+import paho.mqtt.client as mqtt
+from tango import CmdArgType, AttrDataFormat, AttrWriteType, DevState
 
 from Mqtt import Mqtt
 
@@ -49,27 +50,88 @@ class MockDeviceAttr:
         return self._attrs[name]
 
 
+class MockMessage:
+    """Mimics the paho message handed to on_message."""
+    def __init__(self, topic, payload):
+        self.topic = topic
+        self.payload = payload
+
+
+class MockClient:
+    """Mimics the paho client, recording what the driver asks the broker for."""
+    def __init__(self):
+        self.subscriptions = []
+        self.published = []
+
+    def subscribe(self, topic, qos=0):
+        self.subscriptions.append((topic, qos))
+
+    def publish(self, topic, value, qos=0, retain=False):
+        self.published.append((topic, value, qos, retain))
+
+
 class State:
     """Carries instance state; every method lookup falls through to Mqtt."""
 
     def __init__(self):
         self._device_attr = MockDeviceAttr()
         self.dynamicAttributes = {}
+        self.topicAttributes = {}
         self.published = []
         self.events = []
+        self.client = MockClient()
+        self.state = None
+        self.status = ""
+        # the device properties the conversion helpers read; the real ones are device_property
+        # descriptors on Mqtt, which __getattr__ deliberately will not fall through to
+        self.default_qos = 0
+        self.default_retain = False
+        self.will_topic = ""
+        self.birth_topic = ""
+        self.birth_payload = "online"
+        self.will_qos = 0
+        self.will_retain = True
+        self.host = "127.0.0.1"
+        self.port = 1883
+        self._connected = False
+        self._refused = False
+        self._last_msg_at = "none"
 
     def get_device_attr(self):
         return self._device_attr
 
-    def publish(self, payload):
-        self.published.append(payload)
+    def publish_value(self, topic, value, qos, retain):
+        self.published.append((topic, value, qos, retain))
 
     def push_change_event(self, name, value):
         # defined here rather than fallen through to Mqtt: that one resolves to the real tango
         # DeviceImpl method, which rejects a mock as its self
         self.events.append((name, value))
 
+    def add_attribute(self, attr, r_meth=None, w_meth=None):
+        # an attribute created by the driver itself is a DevString scalar unless a test registers a
+        # type for it afterwards, which matches what add_dynamic_attribute defaults to
+        self._device_attr.register(attr.get_name(), CmdArgType.DevString, AttrDataFormat.SCALAR)
+
+    def set_change_event(self, name, implemented, detect):
+        pass
+
+    def set_state(self, state):
+        self.state = state
+
+    def set_status(self, status):
+        self.status = status
+
     def debug_stream(self, message, *args):
+        pass
+
+    def info_stream(self, message, *args):
+        pass
+
+    def warn_stream(self, message, *args):
+        pass
+
+    def error_stream(self, message, *args):
         pass
 
     def __getattr__(self, name):
@@ -82,9 +144,17 @@ class State:
 
 # Thin helpers
 
-def register_attr(s, name, data_type, data_format=AttrDataFormat.SCALAR):
+def register_attr(s, name, data_type, data_format=AttrDataFormat.SCALAR,
+                  topic=None, modifier="", qos=0, retain=False):
     s._device_attr.register(name, data_type, data_format)
-    s.dynamicAttributes[name] = ""
+    s.dynamicAttributes[name] = {
+        "topic": topic if topic is not None else name,
+        "modifier": modifier,
+        "qos": qos,
+        "retain": retain,
+        "value": "",
+    }
+    s.topicAttributes.setdefault(s.dynamicAttributes[name]["topic"], []).append(name)
 
 
 def convert(s, name, val):
@@ -110,7 +180,7 @@ def serialize_write(s, name, value):
        driver's logic instead of calling it, which is why a spectrum of DevString serialising through
        a numpy only code path went unnoticed here while failing on every real write."""
     Mqtt.write_dynamic_attr(s, MockWriteAttr(name, value))
-    return s.dynamicAttributes[name]
+    return s.dynamicAttributes[name]["value"]
 
 
 # ===========================================================================
@@ -710,6 +780,360 @@ def test_edge_cases():
 
 
 # ===========================================================================
+#  Test suites -- qos / retain / protocol descriptor parsing
+# ===========================================================================
+
+def test_qos_parsing():
+    print("\n-- stringValueToQos --")
+    s = State()
+    s.default_qos = 1
+
+    assert_equal("qos omitted -> default_qos", Mqtt.stringValueToQos(s, ""), 1)
+    assert_equal("qos None -> default_qos", Mqtt.stringValueToQos(s, None), 1)
+    assert_equal("qos 0 explicit beats default", Mqtt.stringValueToQos(s, 0), 0)
+    assert_equal("qos '2' from a string descriptor", Mqtt.stringValueToQos(s, "2"), 2)
+    assert_raises("qos 3 rejected", lambda: Mqtt.stringValueToQos(s, 3))
+    assert_raises("qos -1 rejected", lambda: Mqtt.stringValueToQos(s, -1))
+    assert_raises("qos non numeric rejected", lambda: Mqtt.stringValueToQos(s, "high"))
+
+
+def test_bool_parsing():
+    print("\n-- stringValueToBool --")
+    s = State()
+
+    assert_true("retain json true", Mqtt.stringValueToBool(s, True, False))
+    assert_false("retain json false", Mqtt.stringValueToBool(s, False, True))
+    assert_true("retain 'true'", Mqtt.stringValueToBool(s, "true", False))
+    assert_true("retain 'True'", Mqtt.stringValueToBool(s, "True", False))
+    assert_true("retain '1'", Mqtt.stringValueToBool(s, "1", False))
+    assert_false("retain '0'", Mqtt.stringValueToBool(s, "0", True))
+    assert_false("retain 'no'", Mqtt.stringValueToBool(s, "no", True))
+    assert_true("retain omitted -> default True", Mqtt.stringValueToBool(s, "", True))
+    assert_false("retain omitted -> default False", Mqtt.stringValueToBool(s, "", False))
+    assert_true("retain None -> default", Mqtt.stringValueToBool(s, None, True))
+
+
+def test_protocol_mapping():
+    print("\n-- stringValueToProtocol --")
+    s = State()
+
+    assert_equal("protocol 3.1", Mqtt.stringValueToProtocol(s, "3.1"), mqtt.MQTTv31)
+    assert_equal("protocol 3.1.1", Mqtt.stringValueToProtocol(s, "3.1.1"), mqtt.MQTTv311)
+    assert_equal("protocol 5", Mqtt.stringValueToProtocol(s, "5"), mqtt.MQTTv5)
+    assert_equal("protocol 5.0", Mqtt.stringValueToProtocol(s, "5.0"), mqtt.MQTTv5)
+    # the README promises exactly these three versions, so an unknown one is named rather than
+    # silently downgraded to the paho default
+    assert_raises("protocol 4 rejected", lambda: Mqtt.stringValueToProtocol(s, "4"))
+    assert_raises("protocol empty rejected", lambda: Mqtt.stringValueToProtocol(s, ""))
+
+
+def test_connect_result_text():
+    print("\n-- connect_result_text --")
+    s = State()
+
+    assert_equal("rc 0 text", Mqtt.connect_result_text(s, 0), mqtt.connack_string(0))
+    assert_equal("rc 5 text", Mqtt.connect_result_text(s, 5), mqtt.connack_string(5))
+    # mqtt 5 delivers a ReasonCodes object instead of an int and renders its own text
+    reason = mqtt.ReasonCodes(mqtt.CONNACK >> 4, identifier=135)
+    assert_equal("mqtt5 reason code text", Mqtt.connect_result_text(s, reason), str(reason))
+
+
+# ===========================================================================
+#  Test suites -- json payload field extraction
+# ===========================================================================
+
+def test_apply_modifier():
+    print("\n-- apply_modifier --")
+    s = State()
+
+    # no modifier: the payload passes through, bytes decoded to str
+    assert_equal("no modifier str", Mqtt.apply_modifier(s, "raw", ""), "raw")
+    assert_equal("no modifier bytes", Mqtt.apply_modifier(s, b"raw", ""), "raw")
+
+    payload = b'{"temp": 21.5, "hum": 40, "ok": true, "name": "probe", "missing": null}'
+    assert_equal("field float", Mqtt.apply_modifier(s, payload, "temp"), "21.5")
+    assert_equal("field int", Mqtt.apply_modifier(s, payload, "hum"), "40")
+    assert_equal("field bool keeps json spelling", Mqtt.apply_modifier(s, payload, "ok"), "true")
+    assert_equal("field string", Mqtt.apply_modifier(s, payload, "name"), "probe")
+    assert_equal("field null -> empty", Mqtt.apply_modifier(s, payload, "missing"), "")
+
+    nested = b'{"sensor": {"temp": 3.5}, "values": [10, 20, 30]}'
+    assert_equal("nested path", Mqtt.apply_modifier(s, nested, "sensor.temp"), "3.5")
+    assert_equal("list index", Mqtt.apply_modifier(s, nested, "values.1"), "20")
+    # an array field stays json so the spectrum conversion downstream can parse it again
+    assert_equal("array field stays json", Mqtt.apply_modifier(s, nested, "values"),
+                 json.dumps([10, 20, 30]))
+
+    assert_raises("missing key raises", lambda: Mqtt.apply_modifier(s, payload, "nope"))
+    assert_raises("non json payload raises", lambda: Mqtt.apply_modifier(s, b"plain", "temp"))
+
+    # a binary payload carries no json field and must not blow up on decode
+    assert_equal("binary payload passes through", Mqtt.apply_modifier(s, b"\xff\xfe", ""), b"\xff\xfe")
+
+
+def test_modifier_spectrum():
+    print("\n-- modifier feeding a spectrum --")
+    s = State()
+    register_attr(s, "series", CmdArgType.DevDouble, AttrDataFormat.SPECTRUM,
+                  topic="sensors/a", modifier="values")
+
+    extracted = Mqtt.apply_modifier(s, b'{"values": [1.5, 2.5], "unit": "C"}', "values")
+    got = convert(s, "series", extracted)
+    assert_list_equal("spectrum out of a json field", got, [1.5, 2.5], tolerance=1e-9)
+
+
+# ===========================================================================
+#  Test suites -- message dispatch
+# ===========================================================================
+
+def test_on_message_dispatch():
+    print("\n-- on_message: one topic, several attributes --")
+    s = State()
+    for name, modifier in (("temp", "temp"), ("hum", "hum")):
+        Mqtt.add_dynamic_attribute(s, name, variable_type_name="DevDouble",
+                                   write_type_name="READ", topic="sensors/a", modifier=modifier)
+        s._device_attr.register(name, CmdArgType.DevDouble, AttrDataFormat.SCALAR)
+
+    assert_list_equal("topic index holds both attributes", s.topicAttributes["sensors/a"],
+                      ["temp", "hum"])
+
+    Mqtt.on_message(s, None, None, MockMessage("sensors/a", b'{"temp": 21.5, "hum": 40}'))
+    assert_list_equal("both attributes pushed", s.events, [("temp", 21.5), ("hum", 40.0)])
+
+    # an identical payload changes nothing, so nothing is pushed again
+    s.events = []
+    Mqtt.on_message(s, None, None, MockMessage("sensors/a", b'{"temp": 21.5, "hum": 40}'))
+    assert_equal("unchanged payload pushes nothing", len(s.events), 0)
+
+    # only the field that actually moved is pushed
+    Mqtt.on_message(s, None, None, MockMessage("sensors/a", b'{"temp": 22.0, "hum": 40}'))
+    assert_list_equal("only the changed field pushed", s.events, [("temp", 22.0)])
+
+    assert_equal("last_msg_at recorded", s._last_msg_at != "none", True)
+
+
+def test_on_message_bad_modifier_is_isolated():
+    print("\n-- on_message: a modifier that misses keeps the others alive --")
+    s = State()
+    for name, modifier in (("temp", "temp"), ("hum", "hum")):
+        Mqtt.add_dynamic_attribute(s, name, variable_type_name="DevDouble",
+                                   write_type_name="READ", topic="sensors/a", modifier=modifier)
+        s._device_attr.register(name, CmdArgType.DevDouble, AttrDataFormat.SCALAR)
+
+    # hum is absent from this payload; temp still has to get through
+    Mqtt.on_message(s, None, None, MockMessage("sensors/a", b'{"temp": 7.0}'))
+    assert_list_equal("surviving attribute still pushed", s.events, [("temp", 7.0)])
+    assert_equal("failing attribute keeps its old value", s.dynamicAttributes["hum"]["value"], "")
+
+
+def test_on_message_wildcard_topic():
+    print("\n-- on_message: topic seen through a wildcard subscription --")
+    s = State()
+    Mqtt.add_dynamic_attribute(s, "sensors/#")
+    s._connected = True
+    s.client.subscriptions = []
+
+    Mqtt.on_message(s, None, None, MockMessage("sensors/a", b"hello"))
+    assert_true("attribute created for the concrete topic", "sensors/a" in s.dynamicAttributes)
+    assert_list_equal("value pushed", s.events, [("sensors/a", "hello")])
+    # subscribing again would overlap the wildcard, which lets the broker deliver every message twice
+    assert_equal("no overlapping subscription", len(s.client.subscriptions), 0)
+
+
+# ===========================================================================
+#  Test suites -- subscribe / publish
+# ===========================================================================
+
+def test_subscribe_qos():
+    print("\n-- subscribe --")
+    s = State()
+    s.default_qos = 0
+    register_attr(s, "a", CmdArgType.DevDouble, topic="sensors/a", qos=1)
+    register_attr(s, "b", CmdArgType.DevDouble, topic="sensors/a", qos=2)
+    register_attr(s, "c", CmdArgType.DevDouble, topic="sensors/c", qos=0)
+
+    Mqtt.subscribe(s, "sensors/a")
+    # one subscription serves both attributes, so it has to carry the strongest qos either asked for
+    assert_equal("strongest qos wins", s.client.subscriptions[-1], ("sensors/a", 2))
+
+    Mqtt.subscribe(s, "sensors/c")
+    assert_equal("qos 0 stays 0", s.client.subscriptions[-1], ("sensors/c", 0))
+
+    # a topic with no attribute behind it falls back to the device default
+    s.default_qos = 1
+    Mqtt.subscribe(s, "sensors/unknown")
+    assert_equal("unknown topic uses default_qos", s.client.subscriptions[-1], ("sensors/unknown", 1))
+
+
+def test_publish_command():
+    print("\n-- publish command --")
+    s = State()
+
+    Mqtt.publish(s, ["t/a", "5"])
+    assert_equal("two argument form", s.published[-1], ("t/a", "5", 0, False))
+
+    Mqtt.publish(s, ["t/a", "5", "2"])
+    assert_equal("qos argument", s.published[-1], ("t/a", "5", 2, False))
+
+    Mqtt.publish(s, ["t/a", "5", "1", "true"])
+    assert_equal("qos and retain arguments", s.published[-1], ("t/a", "5", 1, True))
+
+    s.default_qos = 2
+    s.default_retain = True
+    Mqtt.publish(s, ["t/a", "5"])
+    assert_equal("device defaults apply", s.published[-1], ("t/a", "5", 2, True))
+
+    # and the value really reaches paho with that qos and retain flag - State stubs publish_value
+    # for every other test here, so this one calls the real one
+    Mqtt.publish_value(s, "t/b", "7", 1, True)
+    assert_equal("handed to the client", s.client.published[-1], ("t/b", "7", 1, True))
+
+
+def test_write_uses_topic_qos_retain():
+    print("\n-- write: publishes on the topic with its qos and retain --")
+    s = State()
+    register_attr(s, "setpoint", CmdArgType.DevDouble, topic="plant/setpoint", qos=2, retain=True)
+
+    serialize_write(s, "setpoint", 21.5)
+    assert_equal("published to the topic, not the attribute name", s.published[-1],
+                 ("plant/setpoint", "21.5", 2, True))
+    assert_list_equal("write pushes a change event", s.events, [("setpoint", 21.5)])
+
+
+def test_modifier_write_rejected():
+    print("\n-- write: a json field is not writable --")
+    s = State()
+    register_attr(s, "temp", CmdArgType.DevDouble, topic="sensors/a", modifier="temp")
+
+    # publishing back would have to rebuild the whole document, and the other fields are not ours
+    assert_raises("write to a modifier attribute rejected",
+                  lambda: serialize_write(s, "temp", 5.0))
+    assert_equal("nothing published", len(s.published), 0)
+
+
+# ===========================================================================
+#  Test suites -- attribute creation and connection handling
+# ===========================================================================
+
+def test_add_dynamic_attribute_binding():
+    print("\n-- add_dynamic_attribute --")
+    s = State()
+
+    Mqtt.add_dynamic_attribute(s, "temperature", variable_type_name="DevDouble",
+                               write_type_name="READ", topic="sensors/a", modifier="temp",
+                               qos="1", retain="true")
+    config = s.dynamicAttributes["temperature"]
+    assert_equal("topic kept apart from the name", config["topic"], "sensors/a")
+    assert_equal("modifier stored", config["modifier"], "temp")
+    assert_equal("qos parsed", config["qos"], 1)
+    assert_true("retain parsed", config["retain"])
+    assert_list_equal("topic index updated", s.topicAttributes["sensors/a"], ["temperature"])
+
+    # the topic defaults to the attribute name, which is what every descriptor without one relies on
+    Mqtt.add_dynamic_attribute(s, "plain/topic")
+    assert_equal("name doubles as topic", s.dynamicAttributes["plain/topic"]["topic"], "plain/topic")
+
+    # a repeated name is ignored rather than registered twice with tango
+    Mqtt.add_dynamic_attribute(s, "plain/topic")
+    assert_list_equal("no duplicate in the topic index", s.topicAttributes["plain/topic"],
+                      ["plain/topic"])
+
+    # an empty name is a no-op, the comma separated fallback list can produce one
+    before = len(s.dynamicAttributes)
+    Mqtt.add_dynamic_attribute(s, "")
+    assert_equal("empty name ignored", len(s.dynamicAttributes), before)
+
+
+def test_add_dynamic_attribute_subscribes_when_connected():
+    print("\n-- add_dynamic_attribute: subscribes at runtime --")
+    s = State()
+
+    # before the connection is up on_connect will subscribe everything, so this one must not
+    Mqtt.add_dynamic_attribute(s, "early")
+    assert_equal("no subscription while disconnected", len(s.client.subscriptions), 0)
+
+    s._connected = True
+    Mqtt.add_dynamic_attribute(s, "late", qos="1")
+    assert_equal("subscribed straight away", s.client.subscriptions[-1], ("late", 1))
+
+
+def test_on_connect():
+    print("\n-- on_connect --")
+    s = State()
+    register_attr(s, "a", CmdArgType.DevDouble, topic="sensors/a", qos=1)
+    register_attr(s, "b", CmdArgType.DevDouble, topic="sensors/b", qos=0)
+
+    Mqtt.on_connect(s, None, None, {}, 0)
+    assert_equal("state ON", s.state, DevState.ON)
+    assert_true("connected flag set", s._connected)
+    assert_list_equal("every topic subscribed", sorted(s.client.subscriptions),
+                      [("sensors/a", 1), ("sensors/b", 0)])
+
+    # a refused connack used to be reported as ON, which hid a wrong password behind a healthy device
+    s = State()
+    register_attr(s, "a", CmdArgType.DevDouble, topic="sensors/a")
+    Mqtt.on_connect(s, None, None, {}, 5)
+    assert_equal("state FAULT on refusal", s.state, DevState.FAULT)
+    assert_false("connected flag cleared", s._connected)
+    assert_equal("nothing subscribed", len(s.client.subscriptions), 0)
+    assert_true("status names the reason", mqtt.connack_string(5) in s.status)
+
+
+def test_birth_message():
+    print("\n-- on_connect: birth message --")
+    s = State()
+    s.will_topic = "plant/status"
+    s.will_payload = "offline"
+    s.will_retain = True
+    s.will_qos = 1
+
+    Mqtt.on_connect(s, None, None, {}, 0)
+    # without it the retained will payload stays the last word on that topic forever
+    assert_equal("birth published on the will topic", s.published[-1],
+                 ("plant/status", "online", 1, True))
+
+    # an explicit birth topic wins over the will topic
+    s = State()
+    s.will_topic = "plant/status"
+    s.birth_topic = "plant/online"
+    Mqtt.on_connect(s, None, None, {}, 0)
+    assert_equal("explicit birth topic used", s.published[-1][0], "plant/online")
+
+    # no will and no birth topic means no birth message at all
+    s = State()
+    Mqtt.on_connect(s, None, None, {}, 0)
+    assert_equal("nothing published without a will", len(s.published), 0)
+
+
+def test_on_disconnect():
+    print("\n-- on_disconnect --")
+    s = State()
+    s._connected = True
+    s._refused = False
+
+    Mqtt.on_disconnect(s, None, None, 1)
+    assert_false("connected flag cleared", s._connected)
+    assert_equal("state UNKNOWN", s.state, DevState.UNKNOWN)
+
+    # a disconnect we asked for is not a fault, and paho must not be told to reconnect
+    s = State()
+    s._connected = True
+    s._refused = False
+    Mqtt.on_disconnect(s, None, None, 0)
+    assert_false("connected flag cleared on clean disconnect", s._connected)
+    assert_equal("clean disconnect leaves the state alone", s.state, None)
+
+    # paho follows a refused connack with a disconnect callback carrying the same code; on_connect
+    # has already recorded why, and this must not overwrite it with a generic reconnect notice
+    s = State()
+    Mqtt.on_connect(s, None, None, {}, 5)
+    refusal_status = s.status
+    Mqtt.on_disconnect(s, None, None, 5)
+    assert_equal("refusal keeps the FAULT state", s.state, DevState.FAULT)
+    assert_equal("refusal keeps its status text", s.status, refusal_status)
+
+
+# ===========================================================================
 #  Main
 # ===========================================================================
 
@@ -753,6 +1177,34 @@ def main():
 
     # -- edge cases --
     test_edge_cases()
+
+    # -- qos / retain / protocol descriptor parsing --
+    test_qos_parsing()
+    test_bool_parsing()
+    test_protocol_mapping()
+    test_connect_result_text()
+
+    # -- json payload field extraction --
+    test_apply_modifier()
+    test_modifier_spectrum()
+
+    # -- message dispatch --
+    test_on_message_dispatch()
+    test_on_message_bad_modifier_is_isolated()
+    test_on_message_wildcard_topic()
+
+    # -- subscribe / publish --
+    test_subscribe_qos()
+    test_publish_command()
+    test_write_uses_topic_qos_retain()
+    test_modifier_write_rejected()
+
+    # -- attribute creation and connection handling --
+    test_add_dynamic_attribute_binding()
+    test_add_dynamic_attribute_subscribes_when_connected()
+    test_on_connect()
+    test_birth_message()
+    test_on_disconnect()
 
     # -- summary --
     total = passed + failed
